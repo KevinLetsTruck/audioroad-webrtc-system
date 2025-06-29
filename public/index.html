@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AudioRoad Network - WebRTC Studio System</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .header {
+            text-align: center;
+            padding: 2rem;
+            background: rgba(0,0,0,0.2);
+        }
+        
+        .logo {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .subtitle {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+        
+        .main-content {
+            flex: 1;
+            padding: 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+            width: 100%;
+        }
+        
+        .shows-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+        
+        .show-card {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 2rem;
+            text-align: center;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        
+        .show-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        
+        .show-title {
+            font-size: 1.3rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+            color: #ffffff;
+        }
+        
+        .show-host {
+            font-size: 1rem;
+            opacity: 0.8;
+            margin-bottom: 1rem;
+        }
+        
+        .show-time {
+            background: rgba(255,255,255,0.2);
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            display: inline-block;
+            margin-bottom: 1rem;
+        }
+        
+        .show-description {
+            font-size: 0.9rem;
+            line-height: 1.5;
+            opacity: 0.9;
+        }
+        
+        .access-panel {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 2rem;
+            text-align: center;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        
+        .access-title {
+            font-size: 1.5rem;
+            margin-bottom: 1.5rem;
+            color: #ffffff;
+        }
+        
+        .access-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .access-btn {
+            background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+            color: white;
+            padding: 1rem 2rem;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        .access-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        
+        .access-btn.screener {
+            background: linear-gradient(45deg, #4ecdc4, #44a08d);
+        }
+        
+        .status-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0,0,0,0.8);
+            padding: 1rem;
+            text-align: center;
+            font-size: 0.9rem;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #4ecdc4;
+            margin-right: 0.5rem;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        @media (max-width: 768px) {
+            .access-buttons {
+                flex-direction: column;
+            }
+            
+            .access-btn {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">🎙️ AudioRoad Network</div>
+        <div class="subtitle">Professional WebRTC Studio System</div>
+    </div>
+    
+    <div class="main-content">
+        <div class="shows-grid">
+            <div class="show-card">
+                <div class="show-title">Trucking Business & Beyond</div>
+                <div class="show-host">Host: Kevin Rutherford</div>
+                <div class="show-time">Monday 2-5 PM EST</div>
+                <div class="show-description">
+                    Business strategies, industry insights, and success stories for trucking professionals.
+                </div>
+            </div>
+            
+            <div class="show-card">
+                <div class="show-title">Destination Health</div>
+                <div class="show-host">Host: Kevin Rutherford</div>
+                <div class="show-time">Tuesday 2-5 PM EST</div>
+                <div class="show-description">
+                    Health, wellness, and medical guidance for drivers and their families.
+                </div>
+            </div>
+            
+            <div class="show-card">
+                <div class="show-title">The Crude Report</div>
+                <div class="show-host">Host: Kevin Rutherford</div>
+                <div class="show-time">Wednesday 2-5 PM EST</div>
+                <div class="show-description">
+                    Energy market analysis, oil industry news, and economic insights.
+                </div>
+            </div>
+            
+            <div class="show-card">
+                <div class="show-title">Red Eye Radio</div>
+                <div class="show-host">Host: Kevin Rutherford</div>
+                <div class="show-time">Thursday 2-5 PM EST</div>
+                <div class="show-description">
+                    Late night talk covering current events, politics, and social issues.
+                </div>
+            </div>
+            
+            <div class="show-card">
+                <div class="show-title">AudioRoad Live</div>
+                <div class="show-host">Host: Kevin Rutherford</div>
+                <div class="show-time">Friday 2-5 PM EST</div>
+                <div class="show-description">
+                    Interactive live show with audience participation and special guests.
+                </div>
+            </div>
+        </div>
+        
+        <div class="access-panel">
+            <div class="access-title">Studio Access</div>
+            <div class="access-buttons">
+                <a href="/screener" class="access-btn screener">
+                    📞 Screener Dashboard
+                </a>
+                <a href="/host" class="access-btn">
+                    🎙️ Host Dashboard
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="status-bar">
+        <span class="status-indicator"></span>
+        WebRTC Studio System Online | Server Status: Connected
+    </div>
+</body>
+</html>
