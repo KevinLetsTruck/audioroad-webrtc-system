@@ -4,7 +4,7 @@
   "description": "AudioRoad Network WebRTC Radio Show Management System",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
+    ""start": "pwd && ls -la && echo 'Files in current directory:' && echo 'Looking for server.js...' && node server.js",",
     "dev": "nodemon server.js"
   },
   "dependencies": {
