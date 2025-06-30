@@ -1,127 +1,266 @@
-const express = require('express');
-const http = require('http');
-const socketIo = require('socket.io');
-const cors = require('cors');
-const helmet = require('helmet');
-const path = require('path');
-const { createClient } = require('@supabase/supabase-js');
+import express from 'express';
+import cors from 'cors';
+import { createClient } from '@supabase/supabase-js';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
-const server = http.createServer(app);
-const io = socketIo(server, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
-  }
-});
-
 const PORT = process.env.PORT || 3000;
 
-// Initialize Supabase client
-const supabase = createClient(
-  process.env.SUPABASE_URL || 'https://urgzmoaaklfikirsgtoz.supabase.co',
-  process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVyZ3ptb2Fha2xmaWtpcnNndG96Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTEyMDI4NjksImV4cCI6MjA2Njc3ODg2OX0.UN7e4ExE4pe0SF1eCEP1IxJ1OPoX9SoHgnp4swdACDA'
-);
-
-// Middleware
-app.use(helmet({
-  contentSecurityPolicy: false
-}));
+// Enable CORS for all routes
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
 
-// Routes
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
+// Serve static files from the dist directory
+app.use(express.static(path.join(__dirname, 'dist')));
 
-app.get('/screener', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'screener.html'));
-});
+// Debug environment variables
+console.log('=== RAILWAY ENVIRONMENT DEBUG ===');
+console.log('NODE_ENV:', process.env.NODE_ENV);
+console.log('PORT:', process.env.PORT);
+console.log('SUPABASE_URL:', process.env.SUPABASE_URL);
+console.log('SUPABASE_ANON_KEY present:', process.env.SUPABASE_ANON_KEY ? 'YES' : 'NO');
 
-app.get('/host', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'host.html'));
-});
+// Supabase configuration with error checking
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_ANON_KEY;
 
-// API Routes
-app.get('/api/shows', async (req, res) => {
+if (!supabaseUrl) {
+  console.error('❌ SUPABASE_URL environment variable is missing!');
+  console.error('Current value:', supabaseUrl);
+  process.exit(1);
+}
+
+if (!supabaseKey) {
+  console.error('❌ SUPABASE_ANON_KEY environment variable is missing!');
+  console.error('Current value:', supabaseKey ? 'Present' : 'Missing');
+  process.exit(1);
+}
+
+// Validate URL format
+try {
+  new URL(supabaseUrl);
+} catch (error) {
+  console.error('❌ SUPABASE_URL is not a valid URL:', supabaseUrl);
+  console.error('Expected format: https://your-project.supabase.co');
+  process.exit(1);
+}
+
+console.log('✅ Supabase URL is valid:', supabaseUrl);
+
+// Initialize Supabase client
+let supabase;
+try {
+  supabase = createClient(supabaseUrl, supabaseKey);
+  console.log('✅ Supabase client created successfully');
+} catch (error) {
+  console.error('❌ Failed to create Supabase client:', error.message);
+  process.exit(1);
+}
+
+// Test database connection
+async function testDatabaseConnection() {
   try {
     const { data, error } = await supabase
-      .from('show_episodes')
-      .select('*')
-      .order('created_at', { ascending: false });
+      .from('callers')
+      .select('count')
+      .limit(1);
     
-    if (error) throw error;
-    res.json(data);
+    if (error) {
+      console.error('❌ Database connection test failed:', error.message);
+    } else {
+      console.log('✅ Database connection successful');
+    }
   } catch (error) {
-    console.error('Error fetching shows:', error);
-    res.status(500).json({ error: error.message });
+    console.error('❌ Database connection error:', error.message);
   }
+}
+
+// API Routes
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'healthy', 
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development'
+  });
 });
 
+// Get all callers
 app.get('/api/callers', async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('callers')
       .select('*')
       .order('created_at', { ascending: false });
-    
-    if (error) throw error;
-    res.json(data);
+
+    if (error) {
+      console.error('Error fetching callers:', error);
+      return res.status(500).json({ error: error.message });
+    }
+
+    res.json(data || []);
   } catch (error) {
-    console.error('Error fetching callers:', error);
-    res.status(500).json({ error: error.message });
+    console.error('Server error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-app.post('/api/callers', async (req, res) => {
+// Get ready callers for host
+app.get('/api/calls/ready', async (req, res) => {
   try {
     const { data, error } = await supabase
-      .from('callers')
-      .insert([req.body])
-      .select();
-    
-    if (error) throw error;
-    res.json(data[0]);
+      .from('calls')
+      .select(`
+        *,
+        callers (
+          name,
+          phone,
+          location
+        )
+      `)
+      .eq('call_status', 'Ready')
+      .order('priority', { ascending: false })
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching ready calls:', error);
+      return res.status(500).json({ error: error.message });
+    }
+
+    res.json(data || []);
   } catch (error) {
-    console.error('Error creating caller:', error);
-    res.status(500).json({ error: error.message });
+    console.error('Server error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// Socket.IO connection handling
-io.on('connection', (socket) => {
-  console.log('User connected:', socket.id);
-  
-  socket.on('join-show', (showId) => {
-    socket.join(`show-${showId}`);
-    console.log(`User ${socket.id} joined show ${showId}`);
-  });
-  
-  socket.on('new-caller', (callerData) => {
-    io.to(`show-${callerData.showId}`).emit('caller-added', callerData);
-  });
-  
-  socket.on('caller-ready', (callerData) => {
-    io.to(`show-${callerData.showId}`).emit('caller-ready', callerData);
-  });
-  
-  socket.on('disconnect', () => {
-    console.log('User disconnected:', socket.id);
-  });
+// Add new caller
+app.post('/api/callers', async (req, res) => {
+  try {
+    const { name, phone, location, email, caller_type, notes, status } = req.body;
+
+    const { data, error } = await supabase
+      .from('callers')
+      .insert([{
+        name,
+        phone,
+        location,
+        email,
+        caller_type: caller_type || 'New',
+        notes,
+        status: status || 'Active'
+      }])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error creating caller:', error);
+      return res.status(500).json({ error: error.message });
+    }
+
+    res.status(201).json(data);
+  } catch (error) {
+    console.error('Server error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'healthy', 
-    timestamp: new Date().toISOString(),
-    port: PORT 
-  });
+// Add new call
+app.post('/api/calls', async (req, res) => {
+  try {
+    const { 
+      caller_id, 
+      topic, 
+      screener_notes, 
+      priority, 
+      screener_name,
+      talking_points 
+    } = req.body;
+
+    const { data, error } = await supabase
+      .from('calls')
+      .insert([{
+        caller_id,
+        topic,
+        screener_notes,
+        call_status: 'Ready',
+        priority: priority || 'Medium',
+        screener_name,
+        talking_points
+      }])
+      .select(`
+        *,
+        callers (
+          name,
+          phone,
+          location
+        )
+      `)
+      .single();
+
+    if (error) {
+      console.error('Error creating call:', error);
+      return res.status(500).json({ error: error.message });
+    }
+
+    res.status(201).json(data);
+  } catch (error) {
+    console.error('Server error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
-server.listen(PORT, () => {
-  console.log(`AudioRoad WebRTC Server running on port ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+// Update call status
+app.patch('/api/calls/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+
+    const { data, error } = await supabase
+      .from('calls')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error updating call:', error);
+      return res.status(500).json({ error: error.message });
+    }
+
+    res.json(data);
+  } catch (error) {
+    console.error('Server error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Serve React app for all other routes
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
+
+// Start server
+app.listen(PORT, async () => {
+  console.log('=================================');
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🌐 URL: http://localhost:${PORT}`);
+  console.log('=================================');
+  
+  // Test database connection after server starts
+  await testDatabaseConnection();
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('Server shutting down gracefully...');
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  console.log('Server shutting down gracefully...');
+  process.exit(0);
 });
