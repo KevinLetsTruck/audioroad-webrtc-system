@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { createClient } from '@supabase/supabase-js';
 import http from 'http';
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -123,7 +124,7 @@ app.get('/api/callers', async (req, res) => {
   }
 });
 
-// Get ready callers for host
+// Get ready callers for host - FIXED with correct enum value
 app.get('/api/calls/ready', async (req, res) => {
   try {
     const { data, error } = await supabase
@@ -136,7 +137,7 @@ app.get('/api/calls/ready', async (req, res) => {
           location
         )
       `)
-      .eq('call_status', 'Waiting')
+      .eq('call_status', 'ready')  // Changed from 'Ready' to 'ready'
       .order('priority', { ascending: false })
       .order('created_at', { ascending: true });
 
@@ -152,9 +153,116 @@ app.get('/api/calls/ready', async (req, res) => {
   }
 });
 
+// Add new caller
+app.post('/api/callers', async (req, res) => {
+  try {
+    const { name, phone, location, email, caller_type, notes, status } = req.body;
+
+    const { data, error } = await supabase
+      .from('callers')
+      .insert([{
+        name,
+        phone,
+        location,
+        email,
+        caller_type: caller_type || 'new',  // Fixed enum case
+        notes,
+        status: status || 'active'  // Fixed enum case
+      }])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error creating caller:', error);
+      return res.status(500).json({ error: error.message });
+    }
+
+    res.status(201).json(data);
+  } catch (error) {
+    console.error('Server error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Add new call
+app.post('/api/calls', async (req, res) => {
+  try {
+    const { 
+      caller_id, 
+      topic, 
+      screener_notes, 
+      priority, 
+      screener_name,
+      talking_points 
+    } = req.body;
+
+    const { data, error } = await supabase
+      .from('calls')
+      .insert([{
+        caller_id,
+        topic,
+        screener_notes,
+        call_status: 'ready',  // Changed from 'Ready' to 'ready'
+        priority: priority?.toLowerCase() || 'medium',  // Ensure lowercase
+        screener_name,
+        talking_points
+      }])
+      .select(`
+        *,
+        callers (
+          name,
+          phone,
+          location
+        )
+      `)
+      .single();
+
+    if (error) {
+      console.error('Error creating call:', error);
+      return res.status(500).json({ error: error.message });
+    }
+
+    res.status(201).json(data);
+  } catch (error) {
+    console.error('Server error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Update call status
+app.patch('/api/calls/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+
+    // Ensure enum values are lowercase
+    if (updates.call_status) {
+      updates.call_status = updates.call_status.toLowerCase();
+    }
+    if (updates.priority) {
+      updates.priority = updates.priority.toLowerCase();
+    }
+
+    const { data, error } = await supabase
+      .from('calls')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error updating call:', error);
+      return res.status(500).json({ error: error.message });
+    }
+
+    res.json(data);
+  } catch (error) {
+    console.error('Server error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Start server
-
-
 const server = http.createServer(app);
 server.keepAliveTimeout = 65000;
 server.headersTimeout = 66000;
@@ -162,7 +270,7 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log('=================================');
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🔗 Health check: http://localhost:${PORT}/health`);
+  console.log(`🔗 Health check: http://localhost:${PORT}/api/health`);
   console.log('=================================');
 });
 
