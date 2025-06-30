@@ -136,7 +136,7 @@ app.get('/api/calls/ready', async (req, res) => {
           location
         )
       `)
-      .eq('call_status', 'Ready')
+      .eq('call_status', 'Waiting')
       .order('priority', { ascending: false })
       .order('created_at', { ascending: true });
 
