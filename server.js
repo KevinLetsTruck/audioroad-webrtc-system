@@ -153,12 +153,21 @@ app.get('/api/calls/ready', async (req, res) => {
 });
 
 // Start server
-app.listen(PORT, '0.0.0.0', () => {
+// Railway health check - this must come first
+app.get('/health', (req, res) => {
+  res.status(200).send('OK');
+});
+
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log('=================================');
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🔗 Health check: http://localhost:${PORT}/health`);
   console.log('=================================');
 });
+
+// Set server timeout
+server.timeout = 120000;
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
