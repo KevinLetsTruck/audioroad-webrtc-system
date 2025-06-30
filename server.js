@@ -1,11 +1,6 @@
 import express from 'express';
 import cors from 'cors';
 import { createClient } from '@supabase/supabase-js';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -14,9 +9,6 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// Serve static files from the dist directory
-app.use(express.static(path.join(__dirname, 'dist')));
-
 // Debug environment variables
 console.log('=== RAILWAY ENVIRONMENT DEBUG ===');
 console.log('NODE_ENV:', process.env.NODE_ENV);
@@ -24,68 +16,91 @@ console.log('PORT:', process.env.PORT);
 console.log('SUPABASE_URL:', process.env.SUPABASE_URL);
 console.log('SUPABASE_ANON_KEY present:', process.env.SUPABASE_ANON_KEY ? 'YES' : 'NO');
 
-// Supabase configuration with error checking
+// Supabase configuration
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_ANON_KEY;
 
-if (!supabaseUrl) {
-  console.error('❌ SUPABASE_URL environment variable is missing!');
-  console.error('Current value:', supabaseUrl);
+if (!supabaseUrl || !supabaseKey) {
+  console.error('❌ Missing Supabase credentials');
   process.exit(1);
 }
 
-if (!supabaseKey) {
-  console.error('❌ SUPABASE_ANON_KEY environment variable is missing!');
-  console.error('Current value:', supabaseKey ? 'Present' : 'Missing');
-  process.exit(1);
-}
+const supabase = createClient(supabaseUrl, supabaseKey);
+console.log('✅ Supabase client created successfully');
 
-// Validate URL format
-try {
-  new URL(supabaseUrl);
-} catch (error) {
-  console.error('❌ SUPABASE_URL is not a valid URL:', supabaseUrl);
-  console.error('Expected format: https://your-project.supabase.co');
-  process.exit(1);
-}
-
-console.log('✅ Supabase URL is valid:', supabaseUrl);
-
-// Initialize Supabase client
-let supabase;
-try {
-  supabase = createClient(supabaseUrl, supabaseKey);
-  console.log('✅ Supabase client created successfully');
-} catch (error) {
-  console.error('❌ Failed to create Supabase client:', error.message);
-  process.exit(1);
-}
-
-// Test database connection
-async function testDatabaseConnection() {
-  try {
-    const { data, error } = await supabase
-      .from('callers')
-      .select('count')
-      .limit(1);
-    
-    if (error) {
-      console.error('❌ Database connection test failed:', error.message);
-    } else {
-      console.log('✅ Database connection successful');
-    }
-  } catch (error) {
-    console.error('❌ Database connection error:', error.message);
-  }
-}
-
-// API Routes
+// Test endpoint
 app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'healthy', 
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development'
+    environment: process.env.NODE_ENV || 'development',
+    port: PORT
   });
+});
+
+// Simple HTML response for root
+app.get('/', (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Radio Show Management System</title>
+        <style>
+            body { 
+                font-family: Arial, sans-serif; 
+                max-width: 800px; 
+                margin: 50px auto; 
+                padding: 20px;
+                background: #f5f5f5;
+            }
+            .container {
+                background: white;
+                padding: 30px;
+                border-radius: 10px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            }
+            .status { 
+                color: #28a745; 
+                font-weight: bold; 
+            }
+            .test-links {
+                margin-top: 20px;
+                padding: 20px;
+                background: #f8f9fa;
+                border-radius: 5px;
+            }
+            .test-links a {
+                display: block;
+                margin: 10px 0;
+                color: #007bff;
+                text-decoration: none;
+            }
+            .test-links a:hover {
+                text-decoration: underline;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🎙️ Radio Show Management System</h1>
+            <p class="status">✅ Server is running successfully!</p>
+            <p><strong>Environment:</strong> ${process.env.NODE_ENV || 'development'}</p>
+            <p><strong>Port:</strong> ${PORT}</p>
+            <p><strong>Database:</strong> Connected to Supabase</p>
+            <p><strong>Timestamp:</strong> ${new Date().toISOString()}</p>
+            
+            <div class="test-links">
+                <h3>Test Links:</h3>
+                <a href="/api/health">Health Check API</a>
+                <a href="/api/callers">View Callers API</a>
+                <a href="/api/calls/ready">Ready Calls API</a>
+            </div>
+            
+            <p><em>✨ The full React application will be deployed here once the frontend is built.</em></p>
+        </div>
+    </body>
+    </html>
+  `);
 });
 
 // Get all callers
@@ -137,121 +152,12 @@ app.get('/api/calls/ready', async (req, res) => {
   }
 });
 
-// Add new caller
-app.post('/api/callers', async (req, res) => {
-  try {
-    const { name, phone, location, email, caller_type, notes, status } = req.body;
-
-    const { data, error } = await supabase
-      .from('callers')
-      .insert([{
-        name,
-        phone,
-        location,
-        email,
-        caller_type: caller_type || 'New',
-        notes,
-        status: status || 'Active'
-      }])
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Error creating caller:', error);
-      return res.status(500).json({ error: error.message });
-    }
-
-    res.status(201).json(data);
-  } catch (error) {
-    console.error('Server error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// Add new call
-app.post('/api/calls', async (req, res) => {
-  try {
-    const { 
-      caller_id, 
-      topic, 
-      screener_notes, 
-      priority, 
-      screener_name,
-      talking_points 
-    } = req.body;
-
-    const { data, error } = await supabase
-      .from('calls')
-      .insert([{
-        caller_id,
-        topic,
-        screener_notes,
-        call_status: 'Ready',
-        priority: priority || 'Medium',
-        screener_name,
-        talking_points
-      }])
-      .select(`
-        *,
-        callers (
-          name,
-          phone,
-          location
-        )
-      `)
-      .single();
-
-    if (error) {
-      console.error('Error creating call:', error);
-      return res.status(500).json({ error: error.message });
-    }
-
-    res.status(201).json(data);
-  } catch (error) {
-    console.error('Server error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// Update call status
-app.patch('/api/calls/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const updates = req.body;
-
-    const { data, error } = await supabase
-      .from('calls')
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Error updating call:', error);
-      return res.status(500).json({ error: error.message });
-    }
-
-    res.json(data);
-  } catch (error) {
-    console.error('Server error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// Serve React app for all other routes
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-});
-
 // Start server
-app.listen(PORT, async () => {
+app.listen(PORT, () => {
   console.log('=================================');
   console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`🌐 URL: http://localhost:${PORT}`);
+  console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log('=================================');
-  
-  // Test database connection after server starts
-  await testDatabaseConnection();
 });
 
 // Graceful shutdown
