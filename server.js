@@ -153,12 +153,11 @@ app.get('/api/calls/ready', async (req, res) => {
 });
 
 // Start server
-// Railway health check - this must come first
-app.get('/health', (req, res) => {
-  res.status(200).send('OK');
-});
+
 
 const server = http.createServer(app);
+server.keepAliveTimeout = 65000;
+server.headersTimeout = 66000;
 server.listen(PORT, '0.0.0.0', () => {
   console.log('=================================');
   console.log(`🚀 Server running on port ${PORT}`);
