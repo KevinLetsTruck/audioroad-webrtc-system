@@ -158,7 +158,8 @@ app.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
 
-const server = app.listen(PORT, '0.0.0.0', () => {
+const server = http.createServer(app);
+server.listen(PORT, '0.0.0.0', () => {
   console.log('=================================');
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
