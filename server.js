@@ -3,8 +3,10 @@ import cors from 'cors';
 import helmet from 'helmet';
 import { createClient } from '@supabase/supabase-js';
 import http from 'http';
+import { Server } from 'socket.io';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { validateCaller, validateCall, validateCallStatusUpdate } from './middleware/validation.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,7 +22,7 @@ app.use(helmet({
       scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'", "http://localhost:*", "ws://localhost:*"]
+      connectSrc: ["'self'", "http://localhost:*", "ws://localhost:*", "wss://*"]
     }
   }
 }));
@@ -54,13 +56,43 @@ const supabaseKey = process.env.SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 console.log('✅ Supabase client created successfully');
 
+// Create HTTP server
+const server = http.createServer(app);
+
+// Initialize Socket.io
+const io = new Server(server, {
+  cors: {
+    origin: process.env.NODE_ENV === 'production' 
+      ? false 
+      : ["http://localhost:3000", "http://localhost:3001"],
+    methods: ["GET", "POST"]
+  }
+});
+
+// Socket.io connection handling
+io.on('connection', (socket) => {
+  console.log('🔌 New client connected:', socket.id);
+
+  // Join rooms based on user role
+  socket.on('join:role', (role) => {
+    socket.join(role);
+    console.log(`Socket ${socket.id} joined room: ${role}`);
+  });
+
+  // Handle disconnection
+  socket.on('disconnect', () => {
+    console.log('🔌 Client disconnected:', socket.id);
+  });
+});
+
 // Test endpoint
 app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'healthy', 
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development',
-    port: PORT
+    port: PORT,
+    socketConnections: io.engine.clientsCount
   });
 });
 
@@ -113,8 +145,8 @@ app.get('/api/calls/ready', async (req, res) => {
   }
 });
 
-// Add new caller
-app.post('/api/callers', async (req, res) => {
+// Add new caller - WITH VALIDATION
+app.post('/api/callers', validateCaller, async (req, res) => {
   try {
     const { name, phone, location, email, caller_type, notes, status } = req.body;
 
@@ -137,6 +169,9 @@ app.post('/api/callers', async (req, res) => {
       return res.status(500).json({ error: error.message });
     }
 
+    // Emit real-time event
+    io.emit('caller:created', data);
+
     res.status(201).json(data);
   } catch (error) {
     console.error('Server error:', error);
@@ -144,8 +179,8 @@ app.post('/api/callers', async (req, res) => {
   }
 });
 
-// Add new call
-app.post('/api/calls', async (req, res) => {
+// Add new call - WITH VALIDATION
+app.post('/api/calls', validateCall, async (req, res) => {
   try {
     const { 
       caller_id, 
@@ -182,6 +217,9 @@ app.post('/api/calls', async (req, res) => {
       return res.status(500).json({ error: error.message });
     }
 
+    // Emit real-time event
+    io.emit('call:created', data);
+
     res.status(201).json(data);
   } catch (error) {
     console.error('Server error:', error);
@@ -189,8 +227,8 @@ app.post('/api/calls', async (req, res) => {
   }
 });
 
-// Update call status
-app.patch('/api/calls/:id', async (req, res) => {
+// Update call status - WITH VALIDATION
+app.patch('/api/calls/:id', validateCallStatusUpdate, async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -207,13 +245,23 @@ app.patch('/api/calls/:id', async (req, res) => {
       .from('calls')
       .update(updates)
       .eq('id', id)
-      .select()
+      .select(`
+        *,
+        callers (
+          name,
+          phone,
+          location
+        )
+      `)
       .single();
 
     if (error) {
       console.error('Error updating call:', error);
       return res.status(500).json({ error: error.message });
     }
+
+    // Emit real-time event
+    io.emit('call:updated', data);
 
     res.json(data);
   } catch (error) {
@@ -260,7 +308,6 @@ app.get('*', (req, res) => {
 });
 
 // Start server
-const server = http.createServer(app);
 server.keepAliveTimeout = 65000;
 server.headersTimeout = 66000;
 server.listen(PORT, '0.0.0.0', () => {
@@ -268,6 +315,7 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔗 Health check: http://localhost:${PORT}/api/health`);
+  console.log(`🔌 Socket.io ready for connections`);
   console.log('=================================');
 });
 
@@ -277,10 +325,18 @@ server.timeout = 120000;
 // Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('Server shutting down gracefully...');
-  process.exit(0);
+  io.close(() => {
+    server.close(() => {
+      process.exit(0);
+    });
+  });
 });
 
 process.on('SIGINT', () => {
   console.log('Server shutting down gracefully...');
-  process.exit(0);
+  io.close(() => {
+    server.close(() => {
+      process.exit(0);
+    });
+  });
 });

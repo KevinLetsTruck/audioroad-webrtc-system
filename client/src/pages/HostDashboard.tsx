@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { api, endpoints } from '../config/api';
+import { useSocket, useCallEvents } from '../contexts/SocketContext';
 import { Call } from '../types';
 import './HostDashboard.css';
 
@@ -12,11 +13,62 @@ const HostDashboard: React.FC = () => {
   const [error, setError] = useState('');
   const [elapsedTime, setElapsedTime] = useState(0);
 
+  const { connected, joinRole } = useSocket();
+
+  // Socket event handlers
+  useCallEvents(
+    // On call created
+    (newCall) => {
+      if (newCall.call_status === 'ready') {
+        setCalls(prevCalls => {
+          // Check if call already exists
+          if (prevCalls.find(c => c.id === newCall.id)) {
+            return prevCalls;
+          }
+          return [...prevCalls, newCall];
+        });
+      }
+    },
+    // On call updated
+    (updatedCall) => {
+      // Handle call status changes
+      if (updatedCall.call_status === 'ready') {
+        // Add to ready queue if not already there
+        setCalls(prevCalls => {
+          const exists = prevCalls.find(c => c.id === updatedCall.id);
+          if (exists) {
+            return prevCalls.map(c => c.id === updatedCall.id ? updatedCall : c);
+          }
+          return [...prevCalls, updatedCall];
+        });
+      } else if (updatedCall.call_status === 'on_air') {
+        // Remove from queue and set as on-air
+        setCalls(prevCalls => prevCalls.filter(c => c.id !== updatedCall.id));
+        setOnAirCall(updatedCall);
+        if (selectedCall?.id === updatedCall.id) {
+          setSelectedCall(null);
+        }
+      } else {
+        // Remove from both queue and on-air
+        setCalls(prevCalls => prevCalls.filter(c => c.id !== updatedCall.id));
+        if (onAirCall?.id === updatedCall.id) {
+          setOnAirCall(null);
+        }
+        if (selectedCall?.id === updatedCall.id) {
+          setSelectedCall(null);
+        }
+      }
+    }
+  );
+
+  // Join host room on mount
+  useEffect(() => {
+    joinRole('host');
+  }, [joinRole]);
+
   // Fetch calls on mount
   useEffect(() => {
     fetchCalls();
-    const interval = setInterval(fetchCalls, 5000); // Refresh every 5 seconds
-    return () => clearInterval(interval);
   }, []);
 
   // Timer for on-air call
@@ -51,23 +103,7 @@ const HostDashboard: React.FC = () => {
         call_status: status
       });
 
-      // Update local state
-      setCalls(calls.filter(call => call.id !== callId));
-      
-      if (status === 'on_air') {
-        const call = calls.find(c => c.id === callId);
-        if (call) {
-          setOnAirCall(call);
-          setSelectedCall(null);
-        }
-      } else if (status === 'completed' || status === 'dropped') {
-        if (onAirCall?.id === callId) {
-          setOnAirCall(null);
-        }
-      }
-
-      // Refresh calls
-      await fetchCalls();
+      // Socket.io will handle the state updates
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to update call status');
     } finally {
@@ -100,6 +136,9 @@ const HostDashboard: React.FC = () => {
             {onAirCall ? '🔴 ON AIR' : '⚪ OFF AIR'}
           </span>
           {onAirCall && <span className="call-timer">{formatTime(elapsedTime)}</span>}
+          <span className={`connection-status ${connected ? 'connected' : 'disconnected'}`}>
+            {connected ? '🟢 Live' : '🔴 Offline'}
+          </span>
         </div>
       </div>
 
@@ -152,6 +191,10 @@ const HostDashboard: React.FC = () => {
 
           <div className="queue-section">
             <h2>📞 Call Queue ({calls.length})</h2>
+            <div className="real-time-indicator">
+              {connected && <span className="pulse-dot"></span>}
+              Real-time sync {connected ? 'active' : 'inactive'}
+            </div>
             <div className="call-queue">
               {calls.length === 0 ? (
                 <div className="empty-queue">No calls waiting in queue</div>
@@ -271,6 +314,10 @@ const HostDashboard: React.FC = () => {
             <div className="stat-item">
               <div className="stat-label">Current Status</div>
               <div className="stat-value">{onAirCall ? 'On Air' : 'Ready'}</div>
+            </div>
+            <div className="stat-item">
+              <div className="stat-label">Connection</div>
+              <div className="stat-value">{connected ? 'Live' : 'Offline'}</div>
             </div>
           </div>
         </div>

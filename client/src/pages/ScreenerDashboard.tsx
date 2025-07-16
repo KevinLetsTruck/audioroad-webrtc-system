@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { api, endpoints } from '../config/api';
+import { useSocket, useCallEvents, useCallerEvents } from '../contexts/SocketContext';
 import { Caller, Call, CallerFormData, CallFormData } from '../types';
 import './ScreenerDashboard.css';
 
@@ -11,6 +12,8 @@ const ScreenerDashboard: React.FC = () => {
   const [isNewCaller, setIsNewCaller] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const { connected, joinRole } = useSocket();
 
   // Form states
   const [callerForm, setCallerForm] = useState<CallerFormData>({
@@ -30,6 +33,55 @@ const ScreenerDashboard: React.FC = () => {
     screener_name: '',
     talking_points: ''
   });
+
+  // Socket event handlers
+  useCallEvents(
+    // On call created
+    (newCall) => {
+      setCalls(prevCalls => {
+        // Check if call already exists
+        if (prevCalls.find(c => c.id === newCall.id)) {
+          return prevCalls;
+        }
+        return [newCall, ...prevCalls];
+      });
+    },
+    // On call updated
+    (updatedCall) => {
+      setCalls(prevCalls => {
+        // If the call status is no longer 'ready', remove it from the list
+        if (updatedCall.call_status !== 'ready') {
+          return prevCalls.filter(c => c.id !== updatedCall.id);
+        }
+        // Otherwise update the call in the list
+        return prevCalls.map(c => c.id === updatedCall.id ? updatedCall : c);
+      });
+    }
+  );
+
+  useCallerEvents(
+    // On caller created
+    (newCaller) => {
+      setCallers(prevCallers => {
+        // Check if caller already exists
+        if (prevCallers.find(c => c.id === newCaller.id)) {
+          return prevCallers;
+        }
+        return [newCaller, ...prevCallers];
+      });
+    },
+    // On caller updated
+    (updatedCaller) => {
+      setCallers(prevCallers => 
+        prevCallers.map(c => c.id === updatedCaller.id ? updatedCaller : c)
+      );
+    }
+  );
+
+  // Join screener room on mount
+  useEffect(() => {
+    joinRole('screener');
+  }, [joinRole]);
 
   // Fetch callers and calls on mount
   useEffect(() => {
@@ -65,7 +117,7 @@ const ScreenerDashboard: React.FC = () => {
     try {
       const response = await api.post(endpoints.callers, callerForm);
       const newCaller = response.data;
-      setCallers([newCaller, ...callers]);
+      // No need to manually update state - Socket.io will handle it
       setSelectedCaller(newCaller);
       setIsNewCaller(false);
       
@@ -93,12 +145,12 @@ const ScreenerDashboard: React.FC = () => {
     setError('');
 
     try {
-      const response = await api.post(endpoints.calls, {
+      await api.post(endpoints.calls, {
         ...callForm,
         caller_id: selectedCaller.id
       });
       
-      setCalls([response.data, ...calls]);
+      // No need to manually update state - Socket.io will handle it
       
       // Reset call form
       setCallForm({
@@ -135,6 +187,9 @@ const ScreenerDashboard: React.FC = () => {
         <h1>📞 Screener Dashboard</h1>
         <div className="header-info">
           <span className="queue-count">Queue: {calls.length} calls</span>
+          <span className={`connection-status ${connected ? 'connected' : 'disconnected'}`}>
+            {connected ? '🟢 Connected' : '🔴 Disconnected'}
+          </span>
         </div>
       </div>
 
@@ -288,6 +343,10 @@ const ScreenerDashboard: React.FC = () => {
         <div className="right-panel">
           <div className="section">
             <h2>Call Queue</h2>
+            <div className="real-time-indicator">
+              {connected && <span className="pulse-dot"></span>}
+              Real-time updates {connected ? 'active' : 'inactive'}
+            </div>
             <div className="call-queue">
               {calls.length === 0 ? (
                 <div className="empty-queue">No calls in queue</div>

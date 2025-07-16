@@ -36,6 +36,24 @@
   font-size: 1.1rem;
 }
 
+.connection-status {
+  background: rgba(255,255,255,0.2);
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.connection-status.connected {
+  background: rgba(72, 219, 251, 0.2);
+}
+
+.connection-status.disconnected {
+  background: rgba(255, 107, 107, 0.2);
+}
+
 .error-banner {
   background: #ff6b6b;
   color: white;
@@ -193,6 +211,38 @@
 .queue-section h2 {
   margin: 0 0 1rem 0;
   color: #333;
+}
+
+.real-time-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: #666;
+  margin-bottom: 1rem;
+}
+
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  background: #48dbfb;
+  border-radius: 50%;
+  animation: pulse-animation 2s ease-in-out infinite;
+}
+
+@keyframes pulse-animation {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.5);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 .call-queue {
